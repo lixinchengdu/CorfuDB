@@ -1,10 +1,19 @@
 package org.corfudb.runtime.object;
 
+import static java.lang.Long.min;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+
+import java.lang.reflect.Constructor;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -22,14 +31,6 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.lang.reflect.Constructor;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.Supplier;
-
-import static java.lang.Long.min;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -79,6 +80,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             UUID streamID;
 
     /**
+     * The name of the stream of the log
+     */
+    @Getter
+    final String streamName;
+
+    /**
      * The type of the underlying object. We use this to instantiate
      * new instances of the underlying object.
      */
@@ -119,7 +126,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * Creates a CorfuCompileProxy object on a particular stream.
      *
      * @param rt                  Connected CorfuRuntime instance.
-     * @param streamID            StreamID of the log.
+     * @param streamName          Name of the stream.
      * @param type                Type of underlying object to instantiate a new instance.
      * @param args                Arguments to create this proxy.
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
@@ -130,7 +137,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
+    public CorfuCompileProxy(CorfuRuntime rt, String streamName, Class<T> type, Object[] args,
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
@@ -138,7 +145,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Set<String> resetSet
     ) {
         this.rt = rt;
-        this.streamID = streamID;
+        this.streamID = CorfuRuntime.getStreamID(streamName);
+        this.streamName = streamName;
         this.type = type;
         this.args = args;
         this.serializer = serializer;
@@ -333,6 +341,16 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
+     * Get the name of the stream this proxy is subscribed to.
+     *
+     * @return The name of the stream this proxy is subscribed to.
+     */
+    @Override
+    public String getStreamName() {
+        return streamName;
+    }
+
+    /**
      * Run in a transactional context.
      *
      * @param txFunction The function to run in a transactional context.
@@ -463,7 +481,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     @Override
     public String toString() {
-        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
+        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + " : " + streamName + "]";
     }
 
     private void abortTransaction(Exception e) {
@@ -494,7 +512,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
             TxResolutionInfo txInfo = new TxResolutionInfo(
                     context.getTransactionID(), snapshotTimestamp);
-            tae = new TransactionAbortedException(txInfo, null, getStreamID(),
+            tae = new TransactionAbortedException(txInfo, null, getStreamID(), getStreamName(),
                     abortCause, e, context);
             context.abortTransaction(tae);
         }
