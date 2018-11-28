@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -278,8 +279,15 @@ public abstract class AbstractTransactionalContext implements
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
         } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
-                    " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
+            // Since this is a user-defined snapshot we must make sure that
+            // the corresponding log position is valid (i.e. the slot has been written)
+            ILogData pos = getBuilder().getRuntime().getAddressSpaceView().peek(txnBuilderTs.getSequence());
+            if (pos == null || !pos.getToken().equals(txnBuilderTs)) {
+                String msg = String.format("User Defined snapshot(ts=%s) is invalid", txnBuilderTs);
+                throw new IllegalArgumentException(msg);
+            }
+            log.trace("obtainSnapshotTimestamp: using user defined snapshot " +
+                    "SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
