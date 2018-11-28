@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -16,14 +17,34 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.GlobalEventExecutor;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLHandshakeException;
+
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -45,20 +66,7 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
 
 
 /**
@@ -128,6 +136,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public volatile boolean shutdown;
 
+    /**
+     * Indicates if SSL authentication has failed or not, in order to apply a backoff mechanism for
+     * exponential time reconnection.
+     */
+    private AtomicBoolean sslAuthenticationFailure;
+
+    private final ExponentialBackoffRetry retryPolicy;
+
     /** The {@link NodeLocator} which represents the remote node this
      *  {@link NettyClientRouter} connects to.
      */
@@ -184,6 +200,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
+
+        sslAuthenticationFailure = new AtomicBoolean();
+        retryPolicy = new ExponentialBackoffRetry(null, parameters.getMaxRetryThreshold());
 
         if (parameters.isTlsEnabled()) {
             try {
@@ -324,6 +343,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
                 log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node);
+                if (sslAuthenticationFailure.get()) {
+                    retryPolicy.nextWait();
+                } else {
+                    // reset exponential time retry policy, to start from beginning on next failure.
+                    retryPolicy.reset();
+                }
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
             }
@@ -363,7 +388,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // a sleep period.
             if (!shutdown) {
                 log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
-                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                if (sslAuthenticationFailure.get()) {
+                    retryPolicy.nextWait();
+                } else {
+                    retryPolicy.reset();
+                    Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                }
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.
@@ -606,6 +636,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 ctx.close();
             } else if (e.state() == IdleState.WRITER_IDLE) {
                 keepAlive();
+            } else if (evt instanceof SslHandshakeCompletionEvent) {
+                // Event fired once the SSL handshake is complete, which may have succeeded or not.
+                // If SSL handshake failed, activate flag to exponentially backoff reconnection time.
+                SslHandshakeCompletionEvent sslEvt = (SslHandshakeCompletionEvent) evt;
+                if (sslEvt.cause() instanceof SSLHandshakeException) {
+                    log.error("SSL Handshake failed for this client. Initiate exponential reconnection backoff.");
+                    sslAuthenticationFailure.set(true);
+                } else {
+                    sslAuthenticationFailure.set(false);
+                }
             }
         } else {
             log.warn("userEventTriggered: unhandled event {}", evt);

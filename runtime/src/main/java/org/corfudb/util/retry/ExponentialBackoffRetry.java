@@ -60,6 +60,11 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         super(runFunction);
     }
 
+    public ExponentialBackoffRetry(IRetryable runFunction, Duration maxRetryThreshold) {
+        super(runFunction);
+        this.maxRetryThreshold = maxRetryThreshold;
+    }
+
     @Override
     public void nextWait() {
         if (nextBackoffTime == 0) {
@@ -81,6 +86,10 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             sleepTime -= sleepTime * randomPart;
         }
         Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
+    }
+
+    public void reset() {
+        nextBackoffTime = 0;
     }
 
 }
