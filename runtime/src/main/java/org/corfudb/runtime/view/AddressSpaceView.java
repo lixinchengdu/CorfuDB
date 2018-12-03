@@ -3,10 +3,10 @@ package org.corfudb.runtime.view;
 import static org.corfudb.util.Utils.getTails;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
-import com.github.benmanes.caffeine.cache.CacheLoader;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Iterables;
 
 import java.time.Duration;
@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
@@ -55,7 +56,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = Caffeine.newBuilder()
+    final LoadingCache<Long, ILogData> readCache = CacheBuilder.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -80,7 +81,7 @@ public class AddressSpaceView extends AbstractView {
         MetricRegistry metrics = runtime.getMetrics();
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
+        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
         metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
@@ -226,7 +227,12 @@ public class AddressSpaceView extends AbstractView {
      */
     public @Nonnull ILogData read(long address) {
         if (!runtime.getParameters().isCacheDisabled()) {
-            ILogData data = readCache.get(address);
+            ILogData data;
+            try {
+                data = readCache.get(address);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
                         + address + " on read");
@@ -247,7 +253,11 @@ public class AddressSpaceView extends AbstractView {
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
         Map<Long, ILogData> addressesMap;
         if (!runtime.getParameters().isCacheDisabled()) {
-            addressesMap = readCache.getAll(addresses);
+            try {
+                addressesMap = readCache.getAll(addresses);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
         } else {
             addressesMap = this.cacheFetch(addresses);
         }
