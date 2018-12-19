@@ -11,12 +11,7 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,17 +23,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenRequest;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Utils;
@@ -111,6 +97,8 @@ public class SequencerServer extends AbstractServer {
      */
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new
             ConcurrentHashMap<>();
+
+    private final ConcurrentHashMap<UUID, NavigableSet<Long>> streamToGlobalAddressesMap = new ConcurrentHashMap<>();
 
     /**
      * TX conflict-resolution information:
@@ -481,6 +469,31 @@ public class SequencerServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.BACKPOINTER_REQ)
+    public synchronized void backpointerRequest(CorfuPayloadMsg<BackpointerRequest> msg, ChannelHandlerContext ctx,
+                                                IServerRouter r) {
+        BackpointerRequest req = msg.getPayload();
+
+        UUID streamId = req.getStream();
+        Long lowerGlobalAddress = req.getStartGlobalAddress();
+        Long upperGlobalAddress = req.getEndGlobalAddress();
+
+        log.debug("lowerGlobalAddress:" + lowerGlobalAddress.toString());
+        log.debug("upperGlobalAddress:" + upperGlobalAddress.toString());
+
+        TreeSet<Long> backpointers;
+        if (lowerGlobalAddress < upperGlobalAddress) {
+            backpointers = (TreeSet) streamToGlobalAddressesMap.computeIfAbsent(streamId, k -> new TreeSet<>())
+                    .subSet(lowerGlobalAddress, upperGlobalAddress);
+        } else {
+            backpointers = new TreeSet<>();
+        }
+
+        BackpointerResponse response = new BackpointerResponse(new ArrayList<>(backpointers));
+        r.sendResponse(ctx, msg, CorfuMsgType.BACKPOINTER_RES.payloadMsg(response));
+        log.debug("Complete Backpointer Response: " + backpointers.size());
+    }
+
     /**
      * this method serves log-tokens for a raw log implementation.
      * it simply extends the global log tail and returns the global-log token
@@ -574,6 +587,8 @@ public class SequencerServer extends AbstractServer {
                     return newTail - 1;
                 }
             });
+
+            streamToGlobalAddressesMap.computeIfAbsent(id, k -> new TreeSet<>()).add(newTail - 1);
         }
 
         // update the cache of conflict parameters

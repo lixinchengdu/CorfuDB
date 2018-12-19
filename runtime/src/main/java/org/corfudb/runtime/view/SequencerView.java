@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.google.common.collect.Lists;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.BackpointerResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CFUtils;
 
@@ -89,5 +90,10 @@ public class SequencerView extends AbstractView {
 
     public void trimCache(long address) {
         runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
+    }
+
+    public BackpointerResponse queryBackPointers(UUID streamId, long lowerBoundGlobalAddress, long upperBoundGlobalAddress) {
+        return layoutHelper(e -> CFUtils.getUninterruptibly((e.getPrimarySequencerClient()
+                .queryBackpointers(streamId, lowerBoundGlobalAddress, upperBoundGlobalAddress))));
     }
 }

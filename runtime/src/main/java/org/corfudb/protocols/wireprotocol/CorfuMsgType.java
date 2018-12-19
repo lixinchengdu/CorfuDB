@@ -51,6 +51,8 @@ public enum CorfuMsgType {
     SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
     SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),
     SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
+    BACKPOINTER_REQ(26, new TypeToken<CorfuPayloadMsg<BackpointerRequest>>(){}),
+    BACKPOINTER_RES(27, new TypeToken<CorfuPayloadMsg<BackpointerResponse>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),

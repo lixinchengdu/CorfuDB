@@ -17,23 +17,32 @@ import lombok.Data;
 public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
     final Range<Long> range;
+    final Integer step;
 
-    /**
-     * Deserialization Constructor from ByteBuf to ReadRequest.
-     *
-     * @param buf The buffer to deserialize
-     */
     public ReadRequest(ByteBuf buf) {
         range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
+        step = ICorfuPayload.fromBuffer(buf, Integer.class);
     }
 
     public ReadRequest(Long address) {
         range = Range.singleton(address);
+        step = 1;
+    }
+
+    public ReadRequest(Range<Long> range) {
+        this.range = range;
+        this.step = 1;
+    }
+
+    public ReadRequest(Long startAddress, Long endAddress, Integer step) {
+        range = Range.closed(startAddress, endAddress);
+        this.step = step;
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, range);
+        ICorfuPayload.serialize(buf, step);
     }
 
 }

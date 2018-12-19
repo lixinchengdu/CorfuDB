@@ -1,24 +1,22 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.NavigableSet;
-import java.util.Optional;
-import java.util.TreeSet;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
-
+import org.corfudb.runtime.view.Layout;
 
 
 /** The abstract queued stream view implements a stream backed by a read queue.
@@ -103,6 +101,27 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Otherwise we remove entries one at a time from the read queue.
+
+        if (getFrom.size() > 0) {
+            ILogData returnData;
+
+            if (getFrom == context.readQueue) {
+                Map<Long, ILogData> dataMap = readAllMap(new ArrayList<>(getFrom));
+                long thisRead = getFrom.pollFirst();
+                getFrom.clear();
+                dataMap.forEach((k, v) -> {
+                    addToResolvedQueue(context, k, v);
+                });
+                returnData = dataMap.get(thisRead);
+            } else {
+                long thisRead = getFrom.pollFirst();
+                returnData = read(thisRead);
+            }
+
+            return returnData;
+        }
+
+        /*
         if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
@@ -111,6 +130,7 @@ public abstract class AbstractQueuedStreamView extends
             }
             return ld;
         }
+        */
 
         // None of the potential reads ended up being part of this
         // stream, so we return null.
@@ -215,6 +235,19 @@ public abstract class AbstractQueuedStreamView extends
         return addresses.parallelStream()
                         .map(this::read)
                         .collect(Collectors.toList());
+    }
+
+    protected @NonNull Map<Long, ILogData> readAllMap(@NonNull final List<Long> addresses) {
+        Map<Layout.LayoutStripe, List<Long>> clientToAddresses = new HashMap<>();
+
+        addresses.stream().forEach(globalAddress -> {
+            Layout.LayoutStripe stripe = runtime.getLayoutView().getLayout().getStripe(globalAddress);
+            clientToAddresses.computeIfAbsent(stripe, k -> new ArrayList<>()).add(globalAddress);
+        });
+
+        return clientToAddresses.entrySet().parallelStream().map(e -> runtime.getAddressSpaceView().read(e.getValue()))
+                .flatMap(map->map.entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**

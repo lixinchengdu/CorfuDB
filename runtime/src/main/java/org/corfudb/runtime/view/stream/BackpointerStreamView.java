@@ -231,11 +231,39 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         return backpointerCount;
     }
 
+    protected boolean followBackpointersFromSequencer(final UUID streamId,
+                                                      final NavigableSet<Long> queue,
+                                                      final long startAddress,
+                                                      final long stopAddress,
+                                                      final Function<ILogData, BackpointerOp> filter) {
+
+        log.trace("followBackPointers: stmreadId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
+                "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
+        // Whether or not we added entries to the queue.
+        boolean entryAdded = false;
+
+        if (startAddress < stopAddress) {
+            return entryAdded;
+        }
+
+        List<Long> backpointers = runtime.getSequencerView().queryBackPointers(streamId, stopAddress,
+                startAddress + 1).getBackpointers();
+
+        if (!backpointers.isEmpty()) {
+            queue.addAll(backpointers);
+            entryAdded = true;
+        }
+
+        return entryAdded;
+    }
+
+
     protected boolean followBackpointers(final UUID streamId,
                                       final NavigableSet<Long> queue,
                                       final long startAddress,
                                       final long stopAddress,
                                       final Function<ILogData, BackpointerOp> filter) {
+
         log.trace("followBackPointers: stmreadId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         // Whether or not we added entries to the queue.

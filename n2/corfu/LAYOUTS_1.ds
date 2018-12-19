@@ -1,0 +1,25 @@
+·–¢{
+  "layoutServers": [
+    "localhost:9999"
+  ],
+  "sequencers": [
+    "localhost:9999"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": -1,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9999"
+          ]
+        }
+      ]
+    }
+  ],
+  "unresponsiveServers": [],
+  "epoch": 1,
+  "clusterId": "7c6d55f3-1491-4b52-b02e-727613a46eba"
+}
