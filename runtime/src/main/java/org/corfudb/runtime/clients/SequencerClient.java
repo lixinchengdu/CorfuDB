@@ -5,12 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequest;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.*;
 
 
 /**
@@ -95,5 +90,12 @@ public class SequencerClient extends AbstractClient {
                                                 Map<UUID, Long> sequencerTails,
                                                 Long readyStateEpoch) {
         return bootstrap(initialToken, sequencerTails, readyStateEpoch, false);
+    }
+
+
+    public CompletableFuture<BackpointerResponse> queryBackpointers(UUID streamId, long lowerBoundGlobalAddress,
+                                                                    long upperBoundGlobalAddress) {
+        return sendMessageWithFuture(CorfuMsgType.BACKPOINTER_REQ.payloadMsg(new BackpointerRequest(streamId,
+                lowerBoundGlobalAddress, upperBoundGlobalAddress)));
     }
 }

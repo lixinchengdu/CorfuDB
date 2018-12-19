@@ -149,7 +149,7 @@ public class CorfuRuntime {
          * The maximum size of the cache, in bytes.
          */
         @Default
-        long numCacheEntries = 5000;
+        long numCacheEntries = 50000;
 
         /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.

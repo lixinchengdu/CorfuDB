@@ -8,6 +8,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -38,7 +39,10 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
+
+import static java.lang.Thread.sleep;
 
 
 /**
@@ -177,10 +181,11 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("read: {}", msg.getPayload().getRange());
+
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
+                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l += msg.getPayload().getStep()) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.getEmpty(l));
