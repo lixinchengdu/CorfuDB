@@ -76,6 +76,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         return ret == null || ret.isEmpty() ? null : ret;
     }
 
+
     /**
      * {@inheritDoc}
      */
