@@ -133,7 +133,7 @@ public class MultiRuntime {
 						.withVersion(GitRepositoryState.getRepositoryState().describe)
 						.parse(args);
 		String corfuConfigurationString = (String) opts.get("-c");
-
+		
 		String runtimeNumberString = (String) opts.get("-n");
 
 		Integer runtimeNumber = 1;
