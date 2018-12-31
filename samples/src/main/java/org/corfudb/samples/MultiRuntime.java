@@ -42,6 +42,11 @@ class MapManipulator extends BaseCorfuAppUtils{
 		String corfuConfigurationString = (String) opts.get("-c");
 		setCorfuRuntime( getRuntimeAndConnect(corfuConfigurationString) );
 
+		String streamString = (String) opts.get("-i");
+		if (streamString != null) {
+			stream = streamString;
+		}
+
 		action();
 	}
 
@@ -49,7 +54,7 @@ class MapManipulator extends BaseCorfuAppUtils{
 	@SuppressWarnings("checkstyle:printLine") // Sample code
 	void action() {
 		String key = "A" + runtimeId;
-		Map<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+		Map<String, String> map = instantiateCorfuObject(SMRMap.class, stream);
 		final int repeatNum = 10;
 		final String str = new String(new char[repeatNum]).replace("\0", "a");
 
@@ -95,6 +100,7 @@ class MapManipulator extends BaseCorfuAppUtils{
 	private Integer transactionSize = 10;
 	private Integer runtimeId = 0;
 	private Integer txn = 200;
+	private String stream = "A";
 	CountDownLatch latch;
 }
 
@@ -106,7 +112,8 @@ public class MultiRuntime {
 			+ " -c <conf>     Set the configuration host and port  [default: localhost:9999]\n"
 			+ " -n <runtime number>		Set the number of working runtime	[default:1]\n"
 			+ " -s <transaction size>		Set the number of read/write pairs in one transaction	[default:1000]\n"
-			+ " -t <transaction num>	Set the number of transactions in one run	[default:1000]\n";
+			+ " -t <transaction num>	Set the number of transactions in one run	[default:1000]\n"
+			+ " -i <stream id>	Set the stream id	[default:\"A\"]\n";
 
 	public class Experiment implements Runnable {
 		public Experiment(Object runtimeId, Object args, CountDownLatch latch) {
