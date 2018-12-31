@@ -135,7 +135,8 @@ public class MultiRuntime {
 		String corfuConfigurationString = (String) opts.get("-c");
 
 		String runtimeNumberString = (String) opts.get("-n");
-		Integer runtimeNumber = 8;
+
+		Integer runtimeNumber = 1;
 		if (runtimeNumberString != null) {
 			runtimeNumber = Integer.parseInt(runtimeNumberString);
 		}
