@@ -107,13 +107,13 @@ class MapManipulator extends BaseCorfuAppUtils{
 public class MultiRuntime {
 
 	public static final String USAGE = "Usage: MultiRuntime [-c <conf>] [-n <runtime number>] [-s <transaction size>] "
-			+ " [-t <transaction num>]\n"
+			+ " [-t <transaction num>] [-i <stream id>]\n"
 			+ "Options:\n"
 			+ " -c <conf>     Set the configuration host and port  [default: localhost:9999]\n"
 			+ " -n <runtime number>		Set the number of working runtime	[default:1]\n"
 			+ " -s <transaction size>		Set the number of read/write pairs in one transaction	[default:1000]\n"
 			+ " -t <transaction num>	Set the number of transactions in one run	[default:1000]\n"
-			+ " -i <stream id>	Set the stream id	[default:\"A\"]\n";
+			+ " -i <stream id>	Set the stream id	[default:A]\n";
 
 	public class Experiment implements Runnable {
 		public Experiment(Object runtimeId, Object args, CountDownLatch latch) {
